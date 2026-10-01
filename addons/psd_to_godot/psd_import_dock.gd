@@ -11,6 +11,7 @@ var _shutting_down := false
 var _python_edit: LineEdit
 var _psd_edit: LineEdit
 var _output_edit: LineEdit
+var _pad_to_canvas_check: CheckBox
 var _check_button: Button
 var _import_button: Button
 var _open_button: Button
@@ -96,6 +97,16 @@ func _build_interface() -> void:
 	output_row.add_child(output_browse)
 	add_child(output_row)
 
+	_pad_to_canvas_check = CheckBox.new()
+	_pad_to_canvas_check.name = "PadToCanvas"
+	_pad_to_canvas_check.text = "Pad PNGs to PSD canvas"
+	_pad_to_canvas_check.tooltip_text = (
+		"Use transparent padding to preserve layer placement with every sprite at (0, 0). "
+		+ "Images match the PSD canvas size; artwork outside the canvas is clipped."
+	)
+	_pad_to_canvas_check.toggled.connect(_on_pad_to_canvas_changed)
+	add_child(_pad_to_canvas_check)
+
 	_import_button = Button.new()
 	_import_button.name = "ImportButton"
 	_import_button.text = "Import PSD as Scene"
@@ -155,9 +166,12 @@ func _load_settings() -> void:
 	_output_edit.text = settings.get_project_metadata(
 		METADATA_SECTION, "output_folder", "res://art/generated"
 	)
+	_pad_to_canvas_check.set_pressed_no_signal(
+		settings.get_project_metadata(METADATA_SECTION, "pad_to_canvas", false)
+	)
 
 
-func _save_setting(key: String, value: String) -> void:
+func _save_setting(key: String, value: Variant) -> void:
 	if _editor_interface == null:
 		return
 	_editor_interface.get_editor_settings().set_project_metadata(
@@ -175,6 +189,10 @@ func _on_psd_changed(value: String) -> void:
 
 func _on_output_changed(value: String) -> void:
 	_save_setting("output_folder", value)
+
+
+func _on_pad_to_canvas_changed(value: bool) -> void:
+	_save_setting("pad_to_canvas", value)
 
 
 func _browse_for_psd() -> void:
@@ -231,6 +249,8 @@ func _import_psd() -> void:
 		ProjectSettings.globalize_path(output_path),
 		psd_path,
 	])
+	if _pad_to_canvas_check.button_pressed:
+		arguments.append("--pad-to-canvas")
 	_start_command("import", arguments)
 
 
@@ -337,6 +357,7 @@ func _command_finished(kind: String, exit_code: int, output: String) -> void:
 func _set_busy(busy: bool) -> void:
 	_check_button.disabled = busy
 	_import_button.disabled = busy
+	_pad_to_canvas_check.disabled = busy
 
 
 func _set_status(message: String) -> void:

@@ -17,6 +17,7 @@ This was entirely coded by ChatGPT Sol. It's really just a python wrapper around
 
 - Select PSD and PSB files from an editor dock.
 - Preserve layer positions, visibility, names, and stacking order.
+- Optionally pad PNGs to the PSD canvas so every sprite uses position `(0, 0)`.
 
 ## Requirements
 
@@ -50,8 +51,23 @@ replace `python3` with `python` or the full path to `python.exe`.
 
 1. Choose a PSD or PSB document.
 2. Choose a generated-files folder inside `res://`.
-3. Select **Import PSD as Scene**.
-4. When the import completes, select **Open Imported Scene**.
+3. Optionally enable **Pad PNGs to PSD canvas**. This choice is remembered per project.
+4. Select **Import PSD as Scene**.
+5. When the import completes, select **Open Imported Scene**.
+
+With padding enabled, every PNG has the PSD document's width and height. Each
+layer's artwork is placed within that image at its original document coordinates,
+with transparent pixels around it. All generated sprites use position `(0, 0)`,
+`centered = false`, and no offset; the scene origin remains the canvas's top-left
+corner. Relative layer placement is preserved without individual transforms.
+Pixels outside the PSD canvas are clipped, and full-canvas textures use more
+texture memory than smaller layer images. Hidden layers retain their visibility.
+
+Padding is off by default, preserving the existing export behavior. Changing the
+option requires reimporting, which replaces the generated textures and scene.
+The manifest records `pad_to_canvas`, `canvas_size`, and each layer's
+`original_bounds` as `[left, top, right, bottom]`; layer positions and dimensions
+describe the exported sprites and PNGs.
 
 For `menu.psd` and the default output folder, the add-on creates:
 
@@ -71,6 +87,8 @@ python addons/psd_to_godot/psd_importer.py \
   --output-dir art/generated \
   path/to/menu.psd
 ```
+
+Add `--pad-to-canvas` to enable transparent canvas padding from the command line.
 
 ## Limitations
 

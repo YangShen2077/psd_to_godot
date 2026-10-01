@@ -15,7 +15,7 @@ import sys
 import tempfile
 
 
-PLUGIN_VERSION = "1.0.1"
+PLUGIN_VERSION = "1.0.2"
 PSD_TOOLS_REQUIREMENT = "psd-tools>=1.10,<2"
 USER_DEPENDENCY_DIR = (
     Path(site.getuserbase())
@@ -185,8 +185,17 @@ def previous_generated_files(manifest_path: Path, project_root: Path) -> set[Pat
     return paths
 
 
-def export_psd(psd_path: Path, project_root: Path, output_root: Path) -> Path:
+def export_psd(
+    psd_path: Path,
+    project_root: Path,
+    output_root: Path,
+    *,
+    pad_to_canvas: bool = False,
+) -> Path:
     require_runtime()
+    # Pillow is installed with psd-tools, potentially by require_runtime().
+    from PIL import Image
+
     psd_path = psd_path.expanduser().resolve()
     project_root = project_root.expanduser().resolve()
     output_root = output_root.expanduser()
@@ -239,9 +248,19 @@ def export_psd(psd_path: Path, project_root: Path, output_root: Path) -> Path:
                 print(f"Skipping non-renderable layer: {layer.name or 'Layer'}")
                 continue
 
+            image = image.convert("RGBA")
+            x, y = left, top
+            if pad_to_canvas:
+                padded_image = Image.new("RGBA", psd.size, (0, 0, 0, 0))
+                # Copy RGBA pixels without a mask to preserve alpha exactly.
+                # Paste clips any pixels outside the document canvas.
+                padded_image.paste(image, (left, top))
+                image = padded_image
+                x, y = 0, 0
+
             hierarchy_name = "__".join(clean_name(item) for item in hierarchy)
             filename = f"{original_index:03d}_{hierarchy_name}.png"
-            image.convert("RGBA").save(staging_dir / filename)
+            image.save(staging_dir / filename)
 
             final_png_path = output_dir / filename
             exported_layers.append(
@@ -249,16 +268,17 @@ def export_psd(psd_path: Path, project_root: Path, output_root: Path) -> Path:
                     "name": layer.name or "Layer",
                     "hierarchy": list(hierarchy),
                     "texture": godot_path(final_png_path, project_root),
-                    "x": left,
-                    "y": top,
-                    "width": width,
-                    "height": height,
+                    "x": x,
+                    "y": y,
+                    "width": image.width,
+                    "height": image.height,
+                    "original_bounds": [left, top, right, bottom],
                     "visible": bool(layer.is_visible()),
                     "filename": filename,
                 }
             )
             print(
-                f"Rendered: {layer.name or 'Layer'} at ({left}, {top}) -> {filename}"
+                f"Rendered: {layer.name or 'Layer'} at ({x}, {y}) -> {filename}"
             )
 
         scene_contents = build_scene(scene_name, exported_layers)
@@ -266,6 +286,8 @@ def export_psd(psd_path: Path, project_root: Path, output_root: Path) -> Path:
             "plugin_version": PLUGIN_VERSION,
             "source_psd": str(psd_path),
             "scene_name": scene_name,
+            "pad_to_canvas": pad_to_canvas,
+            "canvas_size": list(psd.size),
             "layers": exported_layers,
         }
 
@@ -315,6 +337,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Output folder inside the project (default: art/generated)",
     )
     parser.add_argument(
+        "--pad-to-canvas",
+        action="store_true",
+        help="Pad PNGs to the PSD canvas and place every sprite at (0, 0)",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Check Python and psd-tools without importing a document",
@@ -330,7 +357,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.psd is None:
             raise ValueError("A PSD or PSB document path is required.")
-        export_psd(args.psd, args.project_root, args.output_dir)
+        export_psd(
+            args.psd,
+            args.project_root,
+            args.output_dir,
+            pad_to_canvas=args.pad_to_canvas,
+        )
         return 0
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
