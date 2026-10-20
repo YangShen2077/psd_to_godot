@@ -183,8 +183,11 @@ def build_scene(scene_name: str, layers: list[dict]) -> str:
 
     lines.extend(["", f'[node name={gd_string(scene_name)} type="Node2D"]', ""])
 
-    for index, layer in enumerate(layers):
-        node_name = f"{index:03d}_{clean_name(layer['name'])}"
+    for fallback_index, layer in enumerate(layers):
+        # Match the PNG numbering, which keeps the original PSD index so file
+        # names stay stable when layers are skipped.
+        display_index = int(layer.get("index", fallback_index))
+        node_name = f"{display_index:03d}_{clean_name(layer['name'])}"
         lines.extend(
             [
                 f'[node name={gd_string(node_name)} type="Sprite2D" parent="."]',
@@ -309,6 +312,7 @@ def export_psd(
             final_png_path = output_dir / filename
             exported_layers.append(
                 {
+                    "index": original_index,
                     "name": layer.name or "Layer",
                     "hierarchy": list(hierarchy),
                     "texture": godot_path(final_png_path, project_root),
