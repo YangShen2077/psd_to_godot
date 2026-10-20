@@ -12,6 +12,7 @@ var _python_edit: LineEdit
 var _psd_edit: LineEdit
 var _output_edit: LineEdit
 var _pad_to_canvas_check: CheckBox
+var _include_groups_check: CheckBox
 var _check_button: Button
 var _import_button: Button
 var _open_button: Button
@@ -97,6 +98,17 @@ func _build_interface() -> void:
 	output_row.add_child(output_browse)
 	add_child(output_row)
 
+	_include_groups_check = CheckBox.new()
+	_include_groups_check.name = "IncludeGroups"
+	_include_groups_check.text = "Include group names in file names"
+	_include_groups_check.tooltip_text = (
+		"Include the PSD group path in exported PNG names.\n"
+		+ "Enabled: 001_Buttons__Play.png\n"
+		+ "Disabled: 001_Play.png"
+	)
+	_include_groups_check.toggled.connect(_on_include_groups_changed)
+	add_child(_include_groups_check)
+
 	_pad_to_canvas_check = CheckBox.new()
 	_pad_to_canvas_check.name = "PadToCanvas"
 	_pad_to_canvas_check.text = "Pad PNGs to PSD canvas"
@@ -166,6 +178,9 @@ func _load_settings() -> void:
 	_output_edit.text = settings.get_project_metadata(
 		METADATA_SECTION, "output_folder", "res://art/generated"
 	)
+	_include_groups_check.set_pressed_no_signal(
+		settings.get_project_metadata(METADATA_SECTION, "include_groups", true)
+	)
 	_pad_to_canvas_check.set_pressed_no_signal(
 		settings.get_project_metadata(METADATA_SECTION, "pad_to_canvas", false)
 	)
@@ -189,6 +204,10 @@ func _on_psd_changed(value: String) -> void:
 
 func _on_output_changed(value: String) -> void:
 	_save_setting("output_folder", value)
+
+
+func _on_include_groups_changed(value: bool) -> void:
+	_save_setting("include_groups", value)
 
 
 func _on_pad_to_canvas_changed(value: bool) -> void:
@@ -249,6 +268,8 @@ func _import_psd() -> void:
 		ProjectSettings.globalize_path(output_path),
 		psd_path,
 	])
+	if not _include_groups_check.button_pressed:
+		arguments.append("--exclude-groups")
 	if _pad_to_canvas_check.button_pressed:
 		arguments.append("--pad-to-canvas")
 	_start_command("import", arguments)
@@ -357,6 +378,7 @@ func _command_finished(kind: String, exit_code: int, output: String) -> void:
 func _set_busy(busy: bool) -> void:
 	_check_button.disabled = busy
 	_import_button.disabled = busy
+	_include_groups_check.disabled = busy
 	_pad_to_canvas_check.disabled = busy
 
 

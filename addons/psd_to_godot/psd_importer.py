@@ -63,9 +63,16 @@ def clean_name(name: str | None) -> str:
     return value or "Layer"
 
 
-def hierarchy_label(hierarchy: list[str]) -> str:
-    """Join a PSD hierarchy into one readable, filesystem-safe fragment."""
-    label = "__".join(clean_name(item) for item in hierarchy)
+def hierarchy_label(
+    hierarchy: list[str], *, include_groups: bool = True
+) -> str:
+    """Join a PSD hierarchy into one readable, filesystem-safe fragment.
+
+    With ``include_groups`` disabled only the leaf name is used, which keeps
+    exported file names short for deeply nested documents.
+    """
+    parts = hierarchy if include_groups else hierarchy[-1:]
+    label = "__".join(clean_name(item) for item in parts) or "Layer"
     if len(label) > MAX_HIERARCHY_LENGTH:
         label = label[:MAX_HIERARCHY_LENGTH].rstrip(" \t._-") or label[
             :MAX_HIERARCHY_LENGTH
@@ -221,6 +228,7 @@ def export_psd(
     output_root: Path,
     *,
     pad_to_canvas: bool = False,
+    include_groups: bool = True,
 ) -> Path:
     require_runtime()
     # Pillow is installed with psd-tools, potentially by require_runtime().
@@ -288,7 +296,7 @@ def export_psd(
                 image = padded_image
                 x, y = 0, 0
 
-            hierarchy_name = hierarchy_label(hierarchy)
+            hierarchy_name = hierarchy_label(hierarchy, include_groups=include_groups)
             filename = f"{original_index:03d}_{hierarchy_name}.png"
             image.save(staging_dir / filename)
 
@@ -317,6 +325,7 @@ def export_psd(
             "source_psd": str(psd_path),
             "scene_name": scene_name,
             "pad_to_canvas": pad_to_canvas,
+            "include_groups": include_groups,
             "canvas_size": list(psd.size),
             "layers": exported_layers,
         }
@@ -372,6 +381,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Pad PNGs to the PSD canvas and place every sprite at (0, 0)",
     )
     parser.add_argument(
+        "--exclude-groups",
+        action="store_true",
+        help="Leave PSD group names out of the generated PNG file names",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Check Python and psd-tools without importing a document",
@@ -392,6 +406,7 @@ def main(argv: list[str] | None = None) -> int:
             args.project_root,
             args.output_dir,
             pad_to_canvas=args.pad_to_canvas,
+            include_groups=not args.exclude_groups,
         )
         return 0
     except Exception as exc:
