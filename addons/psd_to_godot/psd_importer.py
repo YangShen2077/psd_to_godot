@@ -34,13 +34,43 @@ except ImportError:
 
 SUPPORTED_SUFFIXES = {".psd", ".psb"}
 
+# Characters that are invalid in Windows/POSIX paths or meaningful to Godot
+# node names. Everything else -- including non-ASCII letters such as Chinese
+# layer names -- is preserved so exported files stay recognizable.
+UNSAFE_NAME_CHARS = re.compile(r'[\x00-\x1f\x7f\\/:*?"<>|]+')
+SEPARATOR_CHARS = "_-."
+MAX_NAME_LENGTH = 48
+MAX_HIERARCHY_LENGTH = 120
+
 
 def clean_name(name: str | None) -> str:
-    """Return a filesystem- and node-name-safe fragment."""
+    """Return a filesystem- and node-name-safe fragment.
+
+    Unlike a plain ASCII whitelist this keeps international layer names.
+    Only genuinely unsafe characters are replaced, and the fragment is
+    truncated so generated paths stay within filesystem limits.
+    """
     value = (name or "Layer").strip()
-    value = re.sub(r"[^A-Za-z0-9._-]+", "_", value)
-    value = value.strip("._")
+    value = UNSAFE_NAME_CHARS.sub("_", value)
+    # Windows rejects trailing dots or spaces in file names.
+    value = value.strip(" \t.")
+    # A leading @ collides with Godot's auto-generated node names.
+    value = value.lstrip("@")
+    if not value.strip(SEPARATOR_CHARS):
+        value = "Layer"
+    elif len(value) > MAX_NAME_LENGTH:
+        value = value[:MAX_NAME_LENGTH].rstrip(" \t._-") or value[:MAX_NAME_LENGTH]
     return value or "Layer"
+
+
+def hierarchy_label(hierarchy: list[str]) -> str:
+    """Join a PSD hierarchy into one readable, filesystem-safe fragment."""
+    label = "__".join(clean_name(item) for item in hierarchy)
+    if len(label) > MAX_HIERARCHY_LENGTH:
+        label = label[:MAX_HIERARCHY_LENGTH].rstrip(" \t._-") or label[
+            :MAX_HIERARCHY_LENGTH
+        ]
+    return label
 
 
 def gd_string(value: str) -> str:
@@ -258,7 +288,7 @@ def export_psd(
                 image = padded_image
                 x, y = 0, 0
 
-            hierarchy_name = "__".join(clean_name(item) for item in hierarchy)
+            hierarchy_name = hierarchy_label(hierarchy)
             filename = f"{original_index:03d}_{hierarchy_name}.png"
             image.save(staging_dir / filename)
 
