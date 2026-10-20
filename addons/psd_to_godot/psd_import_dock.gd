@@ -3,6 +3,10 @@ extends VBoxContainer
 
 const HELPER_FILENAME := "psd_importer.py"
 const METADATA_SECTION := "psd_to_godot"
+const CLEAR_OUTPUT_TEXT := "Clear output folder before export"
+const CLEAR_OUTPUT_WARNING := (
+	"Clear output folder before export - DELETES existing files in it!"
+)
 
 var _editor_interface: EditorInterface
 var _thread: Thread
@@ -14,6 +18,7 @@ var _output_edit: LineEdit
 var _pad_to_canvas_check: CheckBox
 var _include_groups_check: CheckBox
 var _skip_hidden_check: CheckBox
+var _clear_output_check: CheckBox
 var _check_button: Button
 var _import_button: Button
 var _open_button: Button
@@ -130,6 +135,17 @@ func _build_interface() -> void:
 	_pad_to_canvas_check.toggled.connect(_on_pad_to_canvas_changed)
 	add_child(_pad_to_canvas_check)
 
+	_clear_output_check = CheckBox.new()
+	_clear_output_check.name = "ClearOutput"
+	_clear_output_check.text = CLEAR_OUTPUT_TEXT
+	_clear_output_check.tooltip_text = (
+		"Delete files left over from a previous export before writing the new ones. "
+		+ "Only runs when the export folder contains the generated layers.json, "
+		+ "so unrelated folders are never emptied. Sub-folders are kept."
+	)
+	_clear_output_check.toggled.connect(_on_clear_output_changed)
+	add_child(_clear_output_check)
+
 	_import_button = Button.new()
 	_import_button.name = "ImportButton"
 	_import_button.text = "Import PSD as Scene"
@@ -195,6 +211,12 @@ func _load_settings() -> void:
 	_skip_hidden_check.set_pressed_no_signal(
 		settings.get_project_metadata(METADATA_SECTION, "skip_hidden", false)
 	)
+	_clear_output_check.set_pressed_no_signal(
+		settings.get_project_metadata(METADATA_SECTION, "clear_existing", false)
+	)
+	_update_clear_output_text(
+		settings.get_project_metadata(METADATA_SECTION, "clear_existing", false)
+	)
 	_pad_to_canvas_check.set_pressed_no_signal(
 		settings.get_project_metadata(METADATA_SECTION, "pad_to_canvas", false)
 	)
@@ -226,6 +248,17 @@ func _on_include_groups_changed(value: bool) -> void:
 
 func _on_skip_hidden_changed(value: bool) -> void:
 	_save_setting("skip_hidden", value)
+
+
+func _on_clear_output_changed(value: bool) -> void:
+	_save_setting("clear_existing", value)
+	_update_clear_output_text(value)
+
+
+func _update_clear_output_text(enabled: bool) -> void:
+	_clear_output_check.text = (
+		CLEAR_OUTPUT_WARNING if enabled else CLEAR_OUTPUT_TEXT
+	)
 
 
 func _on_pad_to_canvas_changed(value: bool) -> void:
@@ -290,6 +323,8 @@ func _import_psd() -> void:
 		arguments.append("--exclude-groups")
 	if _skip_hidden_check.button_pressed:
 		arguments.append("--skip-hidden")
+	if _clear_output_check.button_pressed:
+		arguments.append("--clear-output")
 	if _pad_to_canvas_check.button_pressed:
 		arguments.append("--pad-to-canvas")
 	_start_command("import", arguments)
@@ -400,6 +435,7 @@ func _set_busy(busy: bool) -> void:
 	_import_button.disabled = busy
 	_include_groups_check.disabled = busy
 	_skip_hidden_check.disabled = busy
+	_clear_output_check.disabled = busy
 	_pad_to_canvas_check.disabled = busy
 
 

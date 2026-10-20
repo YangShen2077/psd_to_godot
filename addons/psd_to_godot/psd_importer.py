@@ -165,6 +165,24 @@ def ensure_inside_project(path: Path, project_root: Path) -> None:
         ) from exc
 
 
+def clear_generated_files(output_dir: Path, manifest_path: Path) -> int:
+    """Delete files left over from a previous export.
+
+    Refuses to touch anything unless the export folder holds the generated
+    ``layers.json`` manifest, so an unrelated folder is never emptied.
+    Sub-directories are left alone.
+    """
+    if not manifest_path.is_file():
+        return 0
+
+    removed = 0
+    for path in sorted(output_dir.iterdir()):
+        if path.is_file():
+            path.unlink()
+            removed += 1
+    return removed
+
+
 def godot_path(path: Path, project_root: Path) -> str:
     return f"res://{path.relative_to(project_root).as_posix()}"
 
@@ -233,6 +251,7 @@ def export_psd(
     pad_to_canvas: bool = False,
     include_groups: bool = True,
     skip_hidden: bool = False,
+    clear_existing: bool = False,
 ) -> Path:
     require_runtime()
     # Pillow is installed with psd-tools, potentially by require_runtime().
@@ -337,13 +356,24 @@ def export_psd(
             "pad_to_canvas": pad_to_canvas,
             "include_groups": include_groups,
             "skip_hidden": skip_hidden,
+            "clear_existing": clear_existing,
             "canvas_size": list(psd.size),
             "layers": exported_layers,
         }
 
         output_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = output_dir / "layers.json"
-        stale_paths = previous_generated_files(manifest_path, project_root)
+        if clear_existing:
+            cleared = clear_generated_files(output_dir, manifest_path)
+            if cleared:
+                print(f"Cleared {cleared} file(s) from {output_dir}")
+            else:
+                print("Skipping cleanup: no layers.json in the export folder.")
+        stale_paths = (
+            previous_generated_files(manifest_path, project_root)
+            if not clear_existing
+            else set()
+        )
         new_paths = {
             (output_dir / layer["filename"]).resolve()
             for layer in exported_layers
@@ -402,6 +432,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Do not export layers that are hidden in the PSD",
     )
     parser.add_argument(
+        "--clear-output",
+        action="store_true",
+        help="Delete leftover files in the export folder before writing new ones",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Check Python and psd-tools without importing a document",
@@ -424,6 +459,7 @@ def main(argv: list[str] | None = None) -> int:
             pad_to_canvas=args.pad_to_canvas,
             include_groups=not args.exclude_groups,
             skip_hidden=args.skip_hidden,
+            clear_existing=args.clear_output,
         )
         return 0
     except Exception as exc:
