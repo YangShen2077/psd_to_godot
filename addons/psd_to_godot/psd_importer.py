@@ -229,6 +229,7 @@ def export_psd(
     *,
     pad_to_canvas: bool = False,
     include_groups: bool = True,
+    skip_hidden: bool = False,
 ) -> Path:
     require_runtime()
     # Pillow is installed with psd-tools, potentially by require_runtime().
@@ -265,6 +266,11 @@ def export_psd(
         staging_dir = Path(staging_directory)
 
         for original_index, (layer, hierarchy) in enumerate(walk_layers(psd)):
+            # is_visible() also reports False when a parent group is hidden.
+            if skip_hidden and not layer.is_visible():
+                print(f"Skipping hidden layer: {layer.name or 'Layer'}")
+                continue
+
             left, top, right, bottom = layer.bbox
             width = right - left
             height = bottom - top
@@ -326,6 +332,7 @@ def export_psd(
             "scene_name": scene_name,
             "pad_to_canvas": pad_to_canvas,
             "include_groups": include_groups,
+            "skip_hidden": skip_hidden,
             "canvas_size": list(psd.size),
             "layers": exported_layers,
         }
@@ -386,6 +393,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Leave PSD group names out of the generated PNG file names",
     )
     parser.add_argument(
+        "--skip-hidden",
+        action="store_true",
+        help="Do not export layers that are hidden in the PSD",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Check Python and psd-tools without importing a document",
@@ -407,6 +419,7 @@ def main(argv: list[str] | None = None) -> int:
             args.output_dir,
             pad_to_canvas=args.pad_to_canvas,
             include_groups=not args.exclude_groups,
+            skip_hidden=args.skip_hidden,
         )
         return 0
     except Exception as exc:
