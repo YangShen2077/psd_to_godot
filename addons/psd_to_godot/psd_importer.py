@@ -252,6 +252,7 @@ def export_psd(
     include_groups: bool = True,
     skip_hidden: bool = False,
     clear_existing: bool = False,
+    sequential_index: bool = False,
 ) -> Path:
     require_runtime()
     # Pillow is installed with psd-tools, potentially by require_runtime().
@@ -325,13 +326,17 @@ def export_psd(
                 x, y = 0, 0
 
             hierarchy_name = hierarchy_label(hierarchy, include_groups=include_groups)
-            filename = f"{original_index:03d}_{hierarchy_name}.png"
+            # Numbering either follows the export result (000, 001, ...) or the
+            # layer's position in the PSD, which leaves gaps for skipped layers.
+            layer_index = len(exported_layers) if sequential_index else original_index
+            filename = f"{layer_index:03d}_{hierarchy_name}.png"
             image.save(staging_dir / filename)
 
             final_png_path = output_dir / filename
             exported_layers.append(
                 {
-                    "index": original_index,
+                    "index": layer_index,
+                    "psd_index": original_index,
                     "name": layer.name or "Layer",
                     "hierarchy": list(hierarchy),
                     "texture": godot_path(final_png_path, project_root),
@@ -357,6 +362,7 @@ def export_psd(
             "include_groups": include_groups,
             "skip_hidden": skip_hidden,
             "clear_existing": clear_existing,
+            "sequential_index": sequential_index,
             "canvas_size": list(psd.size),
             "layers": exported_layers,
         }
@@ -437,6 +443,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Delete leftover files in the export folder before writing new ones",
     )
     parser.add_argument(
+        "--sequential-index",
+        action="store_true",
+        help="Number exported layers 000, 001, ... instead of using PSD indices",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Check Python and psd-tools without importing a document",
@@ -460,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
             include_groups=not args.exclude_groups,
             skip_hidden=args.skip_hidden,
             clear_existing=args.clear_output,
+            sequential_index=args.sequential_index,
         )
         return 0
     except Exception as exc:

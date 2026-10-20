@@ -18,6 +18,7 @@ var _output_edit: LineEdit
 var _pad_to_canvas_check: CheckBox
 var _include_groups_check: CheckBox
 var _skip_hidden_check: CheckBox
+var _sequential_index_check: CheckBox
 var _clear_output_check: CheckBox
 var _check_button: Button
 var _import_button: Button
@@ -135,6 +136,16 @@ func _build_interface() -> void:
 	_pad_to_canvas_check.toggled.connect(_on_pad_to_canvas_changed)
 	add_child(_pad_to_canvas_check)
 
+	_sequential_index_check = CheckBox.new()
+	_sequential_index_check.name = "SequentialIndex"
+	_sequential_index_check.text = "Number layers by export order"
+	_sequential_index_check.tooltip_text = (
+		"Number file names and scene nodes 000, 001, ... in export order. "
+		+ "Disabled keeps each layer's PSD index, so skipped layers leave gaps."
+	)
+	_sequential_index_check.toggled.connect(_on_sequential_index_changed)
+	add_child(_sequential_index_check)
+
 	_clear_output_check = CheckBox.new()
 	_clear_output_check.name = "ClearOutput"
 	_clear_output_check.text = CLEAR_OUTPUT_TEXT
@@ -211,6 +222,9 @@ func _load_settings() -> void:
 	_skip_hidden_check.set_pressed_no_signal(
 		settings.get_project_metadata(METADATA_SECTION, "skip_hidden", false)
 	)
+	_sequential_index_check.set_pressed_no_signal(
+		settings.get_project_metadata(METADATA_SECTION, "sequential_index", false)
+	)
 	_clear_output_check.set_pressed_no_signal(
 		settings.get_project_metadata(METADATA_SECTION, "clear_existing", false)
 	)
@@ -248,6 +262,10 @@ func _on_include_groups_changed(value: bool) -> void:
 
 func _on_skip_hidden_changed(value: bool) -> void:
 	_save_setting("skip_hidden", value)
+
+
+func _on_sequential_index_changed(value: bool) -> void:
+	_save_setting("sequential_index", value)
 
 
 func _on_clear_output_changed(value: bool) -> void:
@@ -323,6 +341,8 @@ func _import_psd() -> void:
 		arguments.append("--exclude-groups")
 	if _skip_hidden_check.button_pressed:
 		arguments.append("--skip-hidden")
+	if _sequential_index_check.button_pressed:
+		arguments.append("--sequential-index")
 	if _clear_output_check.button_pressed:
 		arguments.append("--clear-output")
 	if _pad_to_canvas_check.button_pressed:
@@ -435,6 +455,7 @@ func _set_busy(busy: bool) -> void:
 	_import_button.disabled = busy
 	_include_groups_check.disabled = busy
 	_skip_hidden_check.disabled = busy
+	_sequential_index_check.disabled = busy
 	_clear_output_check.disabled = busy
 	_pad_to_canvas_check.disabled = busy
 
