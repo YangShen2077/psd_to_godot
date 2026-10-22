@@ -145,15 +145,41 @@ def print_runtime() -> None:
     print(f"psd-tools {version}")
 
 
-def walk_layers(group, parents=()):
-    """Yield every non-group layer together with its PSD hierarchy."""
+def unique_sibling_name(used: set[str], base: str) -> str:
+    """Return a node name that is not taken by one of its siblings."""
+    if base not in used:
+        used.add(base)
+        return base
+    suffix = 2
+    while f"{base}_{suffix}" in used:
+        suffix += 1
+    name = f"{base}_{suffix}"
+    used.add(name)
+    return name
+
+
+def walk_layers(group, parents=(), parent_path="", chain=()):
+    """Yield every non-group layer with its hierarchy and group node chain.
+
+    ``chain`` holds one ``(path, name, visible)`` entry per ancestor group,
+    using names that are already unique among their siblings.
+    """
+    used: set[str] = set()
+
     for layer in group:
         layer_name = layer.name or "Layer"
         hierarchy = parents + (layer_name,)
         if layer.is_group():
-            yield from walk_layers(layer, hierarchy)
+            name = unique_sibling_name(used, clean_name(layer_name))
+            path = f"{parent_path}/{name}" if parent_path else name
+            yield from walk_layers(
+                layer,
+                hierarchy,
+                path,
+                chain + ((path, name, bool(layer.is_visible())),),
+            )
         else:
-            yield layer, hierarchy
+            yield layer, hierarchy, parent_path, list(chain)
 
 
 def ensure_inside_project(path: Path, project_root: Path) -> None:
@@ -187,7 +213,12 @@ def godot_path(path: Path, project_root: Path) -> str:
     return f"res://{path.relative_to(project_root).as_posix()}"
 
 
-def build_scene(scene_name: str, layers: list[dict]) -> str:
+def build_scene(
+    scene_name: str,
+    layers: list[dict],
+    *,
+    group_nodes: bool = False,
+) -> str:
     lines = [f"[gd_scene load_steps={len(layers) + 1} format=3]", ""]
 
     for index, layer in enumerate(layers, start=1):
@@ -201,14 +232,38 @@ def build_scene(scene_name: str, layers: list[dict]) -> str:
 
     lines.extend(["", f'[node name={gd_string(scene_name)} type="Node2D"]', ""])
 
+    created_paths: set[str] = set()
+
     for fallback_index, layer in enumerate(layers):
         # Match the PNG numbering, which keeps the original PSD index so file
         # names stay stable when layers are skipped.
         display_index = int(layer.get("index", fallback_index))
         node_name = f"{display_index:03d}_{clean_name(layer['name'])}"
+
+        parent = "."
+        group_path = ""
+        if group_nodes:
+            for path, name, group_visible in layer.get("group_chain", ()):
+                if path not in created_paths:
+                    created_paths.add(path)
+                    lines.extend(
+                        [
+                            f'[node name={gd_string(name)} type="Node2D" '
+                            f"parent={gd_string(parent)}]",
+                            "position = Vector2(0, 0)",
+                        ]
+                    )
+                    if not group_visible:
+                        lines.append("visible = false")
+                    lines.append("")
+                parent = path
+                group_path = path
+
+        layer["node_path"] = f"{group_path}/{node_name}" if group_path else node_name
         lines.extend(
             [
-                f'[node name={gd_string(node_name)} type="Sprite2D" parent="."]',
+                f'[node name={gd_string(node_name)} type="Sprite2D" '
+                f"parent={gd_string(parent)}]",
                 f'position = Vector2({layer["x"]}, {layer["y"]})',
                 "centered = false",
                 f'texture = ExtResource({gd_string(layer["resource_id"])})',
@@ -253,6 +308,7 @@ def export_psd(
     skip_hidden: bool = False,
     clear_existing: bool = False,
     sequential_index: bool = False,
+    group_nodes: bool = False,
 ) -> Path:
     require_runtime()
     # Pillow is installed with psd-tools, potentially by require_runtime().
@@ -288,7 +344,12 @@ def export_psd(
     ) as staging_directory:
         staging_dir = Path(staging_directory)
 
-        for original_index, (layer, hierarchy) in enumerate(walk_layers(psd)):
+        for original_index, (
+            layer,
+            hierarchy,
+            group_path,
+            group_chain,
+        ) in enumerate(walk_layers(psd)):
             # is_visible() also reports False when a parent group is hidden.
             if skip_hidden and not layer.is_visible():
                 print(f"Skipping hidden layer: {layer.name or 'Layer'}")
@@ -339,6 +400,8 @@ def export_psd(
                     "psd_index": original_index,
                     "name": layer.name or "Layer",
                     "hierarchy": list(hierarchy),
+                    "group_path": group_path,
+                    "group_chain": group_chain,
                     "texture": godot_path(final_png_path, project_root),
                     "x": x,
                     "y": y,
@@ -353,7 +416,9 @@ def export_psd(
                 f"Rendered: {layer.name or 'Layer'} at ({x}, {y}) -> {filename}"
             )
 
-        scene_contents = build_scene(scene_name, exported_layers)
+        scene_contents = build_scene(
+            scene_name, exported_layers, group_nodes=group_nodes
+        )
         manifest = {
             "plugin_version": PLUGIN_VERSION,
             "source_psd": str(psd_path),
@@ -363,6 +428,7 @@ def export_psd(
             "skip_hidden": skip_hidden,
             "clear_existing": clear_existing,
             "sequential_index": sequential_index,
+            "group_nodes": group_nodes,
             "canvas_size": list(psd.size),
             "layers": exported_layers,
         }
@@ -448,6 +514,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Number exported layers 000, 001, ... instead of using PSD indices",
     )
     parser.add_argument(
+        "--group-nodes",
+        action="store_true",
+        help="Turn PSD groups into empty Node2D parents instead of a flat list",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Check Python and psd-tools without importing a document",
@@ -472,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
             skip_hidden=args.skip_hidden,
             clear_existing=args.clear_output,
             sequential_index=args.sequential_index,
+            group_nodes=args.group_nodes,
         )
         return 0
     except Exception as exc:

@@ -19,6 +19,7 @@ var _pad_to_canvas_check: CheckBox
 var _include_groups_check: CheckBox
 var _skip_hidden_check: CheckBox
 var _sequential_index_check: CheckBox
+var _group_nodes_check: CheckBox
 var _clear_output_check: CheckBox
 var _check_button: Button
 var _import_button: Button
@@ -146,6 +147,16 @@ func _build_interface() -> void:
 	_sequential_index_check.toggled.connect(_on_sequential_index_changed)
 	add_child(_sequential_index_check)
 
+	_group_nodes_check = CheckBox.new()
+	_group_nodes_check.name = "GroupNodes"
+	_group_nodes_check.text = "Preserve PSD groups as nodes"
+	_group_nodes_check.tooltip_text = (
+		"Turn PSD groups into empty Node2D parents so the scene keeps the document hierarchy. "
+		+ "Sprites keep their document coordinates, so draw order and placement do not change."
+	)
+	_group_nodes_check.toggled.connect(_on_group_nodes_changed)
+	add_child(_group_nodes_check)
+
 	_clear_output_check = CheckBox.new()
 	_clear_output_check.name = "ClearOutput"
 	_clear_output_check.text = CLEAR_OUTPUT_TEXT
@@ -225,6 +236,9 @@ func _load_settings() -> void:
 	_sequential_index_check.set_pressed_no_signal(
 		settings.get_project_metadata(METADATA_SECTION, "sequential_index", false)
 	)
+	_group_nodes_check.set_pressed_no_signal(
+		settings.get_project_metadata(METADATA_SECTION, "group_nodes", false)
+	)
 	_clear_output_check.set_pressed_no_signal(
 		settings.get_project_metadata(METADATA_SECTION, "clear_existing", false)
 	)
@@ -266,6 +280,10 @@ func _on_skip_hidden_changed(value: bool) -> void:
 
 func _on_sequential_index_changed(value: bool) -> void:
 	_save_setting("sequential_index", value)
+
+
+func _on_group_nodes_changed(value: bool) -> void:
+	_save_setting("group_nodes", value)
 
 
 func _on_clear_output_changed(value: bool) -> void:
@@ -343,6 +361,8 @@ func _import_psd() -> void:
 		arguments.append("--skip-hidden")
 	if _sequential_index_check.button_pressed:
 		arguments.append("--sequential-index")
+	if _group_nodes_check.button_pressed:
+		arguments.append("--group-nodes")
 	if _clear_output_check.button_pressed:
 		arguments.append("--clear-output")
 	if _pad_to_canvas_check.button_pressed:
@@ -456,6 +476,7 @@ func _set_busy(busy: bool) -> void:
 	_include_groups_check.disabled = busy
 	_skip_hidden_check.disabled = busy
 	_sequential_index_check.disabled = busy
+	_group_nodes_check.disabled = busy
 	_clear_output_check.disabled = busy
 	_pad_to_canvas_check.disabled = busy
 
