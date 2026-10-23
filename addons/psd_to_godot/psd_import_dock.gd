@@ -106,6 +106,16 @@ func _build_interface() -> void:
 	output_row.add_child(output_browse)
 	add_child(output_row)
 
+	_pad_to_canvas_check = CheckBox.new()
+	_pad_to_canvas_check.name = "PadToCanvas"
+	_pad_to_canvas_check.text = "Pad PNGs to PSD canvas"
+	_pad_to_canvas_check.tooltip_text = (
+		"Use transparent padding to preserve layer placement with every sprite at (0, 0). "
+		+ "Images match the PSD canvas size; artwork outside the canvas is clipped."
+	)
+	_pad_to_canvas_check.toggled.connect(_on_pad_to_canvas_changed)
+	add_child(_pad_to_canvas_check)
+
 	_include_groups_check = CheckBox.new()
 	_include_groups_check.name = "IncludeGroups"
 	_include_groups_check.text = "Include group names in file names"
@@ -126,16 +136,6 @@ func _build_interface() -> void:
 	)
 	_skip_hidden_check.toggled.connect(_on_skip_hidden_changed)
 	add_child(_skip_hidden_check)
-
-	_pad_to_canvas_check = CheckBox.new()
-	_pad_to_canvas_check.name = "PadToCanvas"
-	_pad_to_canvas_check.text = "Pad PNGs to PSD canvas"
-	_pad_to_canvas_check.tooltip_text = (
-		"Use transparent padding to preserve layer placement with every sprite at (0, 0). "
-		+ "Images match the PSD canvas size; artwork outside the canvas is clipped."
-	)
-	_pad_to_canvas_check.toggled.connect(_on_pad_to_canvas_changed)
-	add_child(_pad_to_canvas_check)
 
 	_sequential_index_check = CheckBox.new()
 	_sequential_index_check.name = "SequentialIndex"
